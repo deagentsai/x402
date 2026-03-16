@@ -349,7 +349,7 @@ async function getWalletInfo(
 
 export const clientAgent = new Agent({
   name: 'x402_client_agent',
-  model: 'gpt-4o-mini',
+  model: 'gpt-4o',
   description: 'An orchestrator agent that can interact with merchants and handle payments.',
   instruction: `You are a helpful client agent that assists users in buying products from merchant agents using cryptocurrency payments.
 
