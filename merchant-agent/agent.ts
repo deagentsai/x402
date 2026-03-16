@@ -22,6 +22,7 @@
  */
 
 import { LlmAgent as Agent } from 'adk-typescript/agents';
+import { LlmRegistry, LiteLlm } from 'adk-typescript/models';
 import { createHash } from 'crypto';
 import {
   x402PaymentRequiredException,
@@ -29,6 +30,11 @@ import {
 } from 'a2a-x402';
 
 // --- Merchant Agent Configuration ---
+
+// Register LiteLLM to support OpenAI models via OPENAI_API_KEY
+LlmRegistry.register(LiteLlm);
+// Force-match any model name to LiteLLM (OpenAI, etc.)
+(LlmRegistry as any)._register('.*', LiteLlm);
 
 // Validate and load required configuration
 if (!process.env.MERCHANT_WALLET_ADDRESS) {
@@ -53,8 +59,8 @@ console.log(`💼 Merchant Configuration:
  * Returns a fixed price of 1 USDC for all products
  */
 function getProductPrice(productName: string): string {
-  // 1 USDC = 1,000,000 atomic units (USDC has 6 decimals)
-  return "1000000";
+  // 0.1 USDC = 100,000 atomic units (USDC has 6 decimals)
+  return "100000";
 }
 
 // --- Tool Functions ---
@@ -132,7 +138,7 @@ async function checkOrderStatus(
 
 export const merchantAgent = new Agent({
   name: "x402_merchant_agent",
-  model: "gemini-2.0-flash",
+  model: "gpt-4o",
   description: "A production-ready merchant agent that sells products using the x402 payment protocol.",
   instruction: `You are a helpful and friendly merchant agent powered by the x402 payment protocol.
 
