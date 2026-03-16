@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 
 const workspaces = ['client-agent', 'merchant-agent'];
+const rootNodeModules = [
+  path.join(__dirname, '..'),
+];
 
 function patchFile(filePath) {
   if (!fs.existsSync(filePath)) return false;
@@ -28,6 +31,11 @@ function patchFile(filePath) {
 let patched = 0;
 for (const ws of workspaces) {
   const filePath = path.join(__dirname, '..', ws, 'node_modules', 'adk-typescript', 'dist', 'models', 'LiteLlm.js');
+  if (patchFile(filePath)) patched++;
+}
+
+for (const root of rootNodeModules) {
+  const filePath = path.join(root, 'node_modules', 'adk-typescript', 'dist', 'models', 'LiteLlm.js');
   if (patchFile(filePath)) patched++;
 }
 
