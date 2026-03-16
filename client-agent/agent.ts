@@ -20,11 +20,15 @@
 
 import { LlmAgent as Agent } from 'adk-typescript/agents';
 import { ToolContext } from 'adk-typescript/tools';
+import { LlmRegistry, LiteLlm } from 'adk-typescript/models';
 import { LocalWallet } from './src/wallet/Wallet';
 import { x402Utils, PaymentStatus } from 'a2a-x402';
 import { logger } from './src/logger';
 
 // --- Client Agent Configuration ---
+
+// Register LiteLLM to support OpenAI models via OPENAI_API_KEY
+LlmRegistry.register(LiteLlm);
 
 const MERCHANT_AGENT_URL = process.env.MERCHANT_AGENT_URL || 'http://localhost:10000';
 
