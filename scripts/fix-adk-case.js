@@ -6,14 +6,20 @@ const workspaces = [
   'merchant-agent',
 ];
 
+const rootNodeModules = [
+  path.join(__dirname, '..'),
+];
+
 function ensureFile(source, target) {
   if (!fs.existsSync(source)) return;
   if (fs.existsSync(target)) return;
   fs.copyFileSync(source, target);
 }
 
-function fixWorkspace(ws) {
-  const base = path.join(__dirname, '..', ws, 'node_modules', 'adk-typescript', 'dist', 'sessions');
+function fixWorkspace(ws, baseRoot = null) {
+  const base = baseRoot
+    ? path.join(baseRoot, 'node_modules', 'adk-typescript', 'dist', 'sessions')
+    : path.join(__dirname, '..', ws, 'node_modules', 'adk-typescript', 'dist', 'sessions');
   const lowerJs = path.join(base, 'state.js');
   const lowerDts = path.join(base, 'state.d.ts');
   const upperJs = path.join(base, 'State.js');
@@ -37,7 +43,9 @@ function fixWorkspace(ws) {
     }
   }
 
-  const toolsBase = path.join(__dirname, '..', ws, 'node_modules', 'adk-typescript', 'dist', 'tools');
+  const toolsBase = baseRoot
+    ? path.join(baseRoot, 'node_modules', 'adk-typescript', 'dist', 'tools')
+    : path.join(__dirname, '..', ws, 'node_modules', 'adk-typescript', 'dist', 'tools');
   const lowerToolJs = path.join(toolsBase, 'toolContext.js');
   const lowerToolDts = path.join(toolsBase, 'toolContext.d.ts');
   const upperToolJs = path.join(toolsBase, 'ToolContext.js');
@@ -51,6 +59,10 @@ function fixWorkspace(ws) {
 
 for (const ws of workspaces) {
   fixWorkspace(ws);
+}
+
+for (const root of rootNodeModules) {
+  fixWorkspace(null, root);
 }
 
 console.log('✅ adk-typescript case-fix applied (State.js, ToolContext.js, Session*Service.js)');
