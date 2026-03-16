@@ -29,6 +29,8 @@ import { logger } from './src/logger';
 
 // Register LiteLLM to support OpenAI models via OPENAI_API_KEY
 LlmRegistry.register(LiteLlm);
+// Force-match any model name to LiteLLM (OpenAI, etc.)
+(LlmRegistry as any)._register('.*', LiteLlm);
 
 const MERCHANT_AGENT_URL = process.env.MERCHANT_AGENT_URL || 'http://localhost:10000';
 
@@ -353,7 +355,7 @@ async function getWalletInfo(
 
 export const clientAgent = new Agent({
   name: 'x402_client_agent',
-  model: 'gemini-2.0-flash',
+  model: 'gpt-4o',
   description: 'An orchestrator agent that can interact with merchants and handle payments.',
   instruction: `You are a helpful client agent that assists users in buying products from merchant agents using cryptocurrency payments.
 
