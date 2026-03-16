@@ -12,13 +12,21 @@ function patchFile(filePath) {
   const before = content;
 
   content = content.replace(
-    "tool_call_id: part.functionResponse.id || '',",
     "tool_call_id: part.functionResponse.id || part.functionResponse.name || '',",
+    "tool_call_id: part.functionResponse.name || part.functionResponse.id || '',",
+  );
+  content = content.replace(
+    "tool_call_id: part.functionResponse.id || '',",
+    "tool_call_id: part.functionResponse.name || part.functionResponse.id || '',",
   );
 
   content = content.replace(
-    "id: part.functionCall.id || '',",
     "id: part.functionCall.id || part.functionCall.name || '',",
+    "id: part.functionCall.name || part.functionCall.id || '',",
+  );
+  content = content.replace(
+    "id: part.functionCall.id || '',",
+    "id: part.functionCall.name || part.functionCall.id || '',",
   );
 
   if (content !== before) {
