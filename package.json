@@ -1,0 +1,15 @@
+{
+  "name": "x402",
+  "private": true,
+  "workspaces": [
+    "x402_a2a",
+    "client-agent",
+    "merchant-agent"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "build:lib": "npm --workspace a2a-x402 run build",
+    "dev:client": "npm --workspace x402-client-agent run dev",
+    "dev:merchant": "npm --workspace x402_merchant_agent run dev"
+  }
+}

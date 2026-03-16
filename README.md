@@ -5,7 +5,51 @@ A complete TypeScript implementation of the [Python x402 payment protocol extens
 [![npm version](https://badge.fury.io/js/a2a-x402.svg)](https://www.npmjs.com/package/a2a-x402)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Quick start
+## Repo setup (this workspace)
+
+This repo is a small monorepo with three packages:
+- `x402_a2a` — the TypeScript x402 library
+- `merchant-agent` — merchant service example
+- `client-agent` — client wallet/orchestrator example
+
+### Step-by-step
+
+```bash
+# 1) From the repo root
+cd x402
+
+# 2) Install dependencies for all workspaces
+npm install
+
+# 3) Build the library (required for the agents)
+npm run build:lib
+
+# 4) Run the merchant (Terminal A)
+npm run dev:merchant
+
+# 5) Run the client (Terminal B)
+npm run dev:client
+```
+
+Each agent needs env vars:
+```bash
+cd merchant-agent
+cp .env.example .env
+# edit .env
+
+cd ../client-agent
+cp .env.example .env
+# edit .env
+```
+
+### Tools/stack used
+- Node.js 18+
+- npm workspaces
+- TypeScript
+- ethers.js
+- adk-typescript (Agent Development Kit)
+
+## Quick start (npm package)
 
 ```bash
 npm install a2a-x402
