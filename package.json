@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "install:all": "npm install --workspaces",
-    "postinstall": "node scripts/fix-adk-case.js",
+    "postinstall": "node scripts/fix-adk-case.js && node scripts/patch-adk-litellm.js",
     "fix:adk": "node scripts/fix-adk-case.js",
+    "fix:litellm": "node scripts/patch-adk-litellm.js",
     "build:lib": "npm --workspace a2a-x402 run build",
     "dev:client": "npm --workspace x402-client-agent run dev",
     "dev:merchant": "npm --workspace x402_merchant_agent run dev"
