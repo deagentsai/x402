@@ -131,6 +131,8 @@ const EVM_NETWORKS: Record<string, { name: string; rpc: string; explorer: string
   arbitrum: { name: 'Arbitrum', rpc: 'https://arbitrum-one.publicnode.com', explorer: 'https://arbiscan.io', native: 'ETH', dexscreenerChain: 'arbitrum', coingeckoId: 'ethereum' },
   base: { name: 'Base', rpc: 'https://base-rpc.publicnode.com', explorer: 'https://basescan.org', native: 'ETH', dexscreenerChain: 'base', coingeckoId: 'ethereum' },
   polygon: { name: 'Polygon', rpc: 'https://polygon-bor.publicnode.com', explorer: 'https://polygonscan.com', native: 'MATIC', dexscreenerChain: 'polygon', coingeckoId: 'matic-network' },
+  bsc: { name: 'BSC', rpc: 'https://bsc-rpc.publicnode.com', explorer: 'https://bscscan.com', native: 'BNB', dexscreenerChain: 'bsc', coingeckoId: 'binancecoin' },
+  avalanche: { name: 'Avalanche', rpc: 'https://avalanche-c-chain-rpc.publicnode.com', explorer: 'https://snowtrace.io', native: 'AVAX', dexscreenerChain: 'avalanche', coingeckoId: 'avalanche-2' },
 };
 
 const POPULAR_TOKENS: Record<string, Array<{ address: string; symbol: string; name: string; decimals: number; isNative?: boolean }>> = {
@@ -152,6 +154,14 @@ const POPULAR_TOKENS: Record<string, Array<{ address: string; symbol: string; na
   polygon: [
     { address: 'native', symbol: 'MATIC', name: 'Polygon', decimals: 18, isNative: true },
     { address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+  ],
+  bsc: [
+    { address: 'native', symbol: 'BNB', name: 'BNB', decimals: 18, isNative: true },
+    { address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', symbol: 'USDC', name: 'USD Coin', decimals: 18 },
+  ],
+  avalanche: [
+    { address: 'native', symbol: 'AVAX', name: 'Avalanche', decimals: 18, isNative: true },
+    { address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
   ],
 };
 
@@ -186,6 +196,33 @@ async function fetchTokenPriceFromDexscreener(tokenAddress: string, chain: strin
     };
   } catch (err) {
     return null;
+  }
+}
+
+const TOKEN_DB_TTL_MS = 5 * 60 * 1000;
+const tokenDbCache: Record<string, { timestamp: number; tokens: any[] }> = {};
+
+async function fetchTokenDatabase(networkKey: string) {
+  const cached = tokenDbCache[networkKey];
+  if (cached && Date.now() - cached.timestamp < TOKEN_DB_TTL_MS) return cached.tokens;
+  const fileMap: Record<string, string> = {
+    ethereum: 'ethereum.json',
+    arbitrum: 'arbitrum.json',
+    base: 'base.json',
+    polygon: 'polygon.json',
+    bsc: 'bsc.json',
+    avalanche: 'avalanche.json',
+  };
+  const file = fileMap[networkKey];
+  if (!file) return [];
+  try {
+    const url = `https://raw.githubusercontent.com/deagentsai/token_database/main/${file}`;
+    const data: any = await fetchJson(url);
+    const tokens = Array.isArray(data) ? data : [];
+    tokenDbCache[networkKey] = { timestamp: Date.now(), tokens };
+    return tokens;
+  } catch (err) {
+    return [];
   }
 }
 
@@ -383,8 +420,28 @@ async function runWalletSearch(
         });
       }
 
-      const tokenList = POPULAR_TOKENS[key] || [];
-      for (const token of tokenList.filter(t => !t.isNative)) {
+      const builtIn = POPULAR_TOKENS[key] || [];
+      const onlineDb = await fetchTokenDatabase(key);
+      const merged = new Map<string, { address: string; symbol: string; name: string; decimals: number }>();
+
+      for (const t of builtIn) {
+        if (!t.address || t.address === 'native') continue;
+        merged.set(t.address.toLowerCase(), { address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals });
+      }
+      for (const t of onlineDb) {
+        if (!t?.address || t.address === 'native') continue;
+        if (!merged.has(t.address.toLowerCase())) {
+          merged.set(t.address.toLowerCase(), {
+            address: t.address,
+            symbol: t.symbol || t.address.slice(0, 6),
+            name: t.name || 'Token',
+            decimals: Number.isFinite(t.decimals) ? t.decimals : 18,
+          });
+        }
+      }
+
+      const tokenList = Array.from(merged.values()).slice(0, 220);
+      for (const token of tokenList) {
         try {
           const iface = new ethers.Interface(['function balanceOf(address owner) view returns (uint256)']);
           const data = iface.encodeFunctionData('balanceOf', [addr]);
