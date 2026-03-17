@@ -35,6 +35,7 @@ LlmRegistry.register(LiteLlm);
 
 const MERCHANT_AGENT_URL = process.env.MERCHANT_AGENT_URL || 'http://localhost:10000';
 const DEFAULT_EBOOK_LINK = 'https://gist.github.com/dabit3/fd7f4d24ebdda092f6cbbb6a5e57e487';
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '';
 
 logger.log(`🤖 Client Agent Configuration:
   Merchant URL: ${MERCHANT_AGENT_URL}
@@ -334,7 +335,8 @@ async function runWalletSearch(
       solChange = 0;
     }
 
-    const rpcEndpoints = ['https://solana-rpc.publicnode.com'];
+    const heliusRpc = HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : '';
+    const rpcEndpoints = [heliusRpc, 'https://solana-rpc.publicnode.com'].filter(Boolean);
     for (const rpc of rpcEndpoints) {
       try {
         const res = await fetch(rpc, {
@@ -358,7 +360,7 @@ async function runWalletSearch(
 
     // SPL tokens
     try {
-      const tokenRes = await fetch('https://solana-rpc.publicnode.com', {
+      const tokenRes = await fetch(heliusRpc || 'https://solana-rpc.publicnode.com', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
