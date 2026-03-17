@@ -171,9 +171,9 @@ async function rpcCall(rpcUrl: string, method: string, params: any[]) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params })
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || 'RPC error');
-  return data.result;
+  const data: any = await res.json();
+  if (data?.error) throw new Error(data.error.message || 'RPC error');
+  return data?.result;
 }
 
 async function fetchTokenPriceFromDexscreener(tokenAddress: string, chain: string) {
@@ -341,7 +341,7 @@ async function runWalletSearch(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [addr] })
         });
-        const data = await res.json();
+        const data: any = await res.json();
         if (data?.result?.value !== undefined) {
           solBalance = data.result.value / 1e9;
           break;
@@ -367,7 +367,7 @@ async function runWalletSearch(
           params: [addr, { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' }, { encoding: 'jsonParsed' }]
         })
       });
-      const tokenData = await tokenRes.json();
+      const tokenData: any = await tokenRes.json();
       const accounts = tokenData?.result?.value || [];
       for (const account of accounts.slice(0, 25)) {
         const info = account?.account?.data?.parsed?.info;
