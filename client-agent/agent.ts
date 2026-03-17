@@ -297,6 +297,13 @@ async function confirmPayment(
         }
       }
 
+      // Fallback: include product resource link if merchant response didn't include it
+      let merchantLink = '';
+      const resourceLink = state.pendingPayment.requirements.resource;
+      if (!merchantConfirmation && resourceLink) {
+        merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
+      }
+
       const amountUSDC = (Number(amount) / 1_000_000).toFixed(6);
       const result = `✅ Payment completed successfully!
 
@@ -306,7 +313,7 @@ async function confirmPayment(
 - Token: ${tokenAddress}
 - Merchant: ${merchantAddress}
 - Transaction: ${transferResult.txHash}
-- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}`;
+- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}${merchantLink}`;
 
       // Clear pending payment
       state.pendingPayment = undefined;
