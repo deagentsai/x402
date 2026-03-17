@@ -731,9 +731,23 @@ async function confirmPayment(
       let cryptoNews = '';
       if (isNews) {
         try {
-          const news = await fetchJson(`https://finnhub.io/api/v1/news?category=crypto&token=${process.env.FINNHUB_API_KEY}`);
-          const items = Array.isArray(news) ? news.slice(0, 20) : [];
-          const formatted = items.map((item: any, idx: number) => {
+          const apiKey = process.env.FINNHUB_API_KEY;
+          const primary = await fetchJson(`https://finnhub.io/api/v1/news?category=crypto&token=${apiKey}`);
+          const primaryItems = Array.isArray(primary) ? primary : [];
+
+          let items = primaryItems;
+          if (items.length < 20) {
+            const fallback = await fetchJson(`https://finnhub.io/api/v1/news?category=general&token=${apiKey}`);
+            const fallbackItems = Array.isArray(fallback) ? fallback : [];
+            items = [...items, ...fallbackItems];
+          }
+
+          const sorted = items
+            .filter((item: any) => item?.headline)
+            .sort((a: any, b: any) => (b.datetime || 0) - (a.datetime || 0))
+            .slice(0, 20);
+
+          const formatted = sorted.map((item: any, idx: number) => {
             const title = item?.headline || 'Untitled';
             const topic = item?.category ? `Topic: ${item.category}` : 'Topic: crypto';
             const source = item?.source ? `Source: ${item.source}` : 'Source: finnhub';
