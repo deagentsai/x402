@@ -65,6 +65,45 @@ console.log(`💼 Merchant Configuration:
 
 // --- Helper Functions ---
 
+async function fetchJson(url: string) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+function pearsonCorrelation(a: number[], b: number[]) {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return null;
+  const meanA = a.reduce((s, v) => s + v, 0) / n;
+  const meanB = b.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let denA = 0;
+  let denB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - meanA;
+    const db = b[i] - meanB;
+    num += da * db;
+    denA += da * da;
+    denB += db * db;
+  }
+  const denom = Math.sqrt(denA * denB);
+  return denom === 0 ? null : num / denom;
+}
+
+function computeReturns(prices: number[]) {
+  const returns: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    const prev = prices[i - 1];
+    const curr = prices[i];
+    if (prev > 0) {
+      returns.push((curr - prev) / prev);
+    }
+  }
+  return returns;
+}
+
 /**
  * Returns a fixed price of 1 USDC for all products
  */
@@ -76,6 +115,79 @@ function getProductPrice(productName: string): string {
 }
 
 // --- Tool Functions ---
+
+/**
+ * Get live BTC price and BTC/ETH correlation
+ */
+async function getMarketInsights(
+  params: Record<string, any>,
+  context?: any
+): Promise<string> {
+  const windowDays = Number(params?.days || 30);
+
+  // Price from Dexscreener (fallback to CoinGecko)
+  let priceSource = 'Dexscreener';
+  let btcPrice: number | null = null;
+  try {
+    const search = await fetchJson('https://api.dexscreener.com/latest/dex/search?q=WBTC');
+    const pairs = Array.isArray(search?.pairs) ? search.pairs : [];
+    const best = pairs
+      .filter((p: any) => p?.baseToken?.symbol?.toUpperCase() === 'WBTC')
+      .sort((a: any, b: any) => (b?.liquidity?.usd || 0) - (a?.liquidity?.usd || 0))[0];
+    if (best?.priceUsd) {
+      btcPrice = Number(best.priceUsd);
+    }
+  } catch (error) {
+    // ignore and fall back
+  }
+
+  if (!btcPrice) {
+    try {
+      priceSource = 'CoinGecko';
+      const cg = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      btcPrice = cg?.bitcoin?.usd ?? null;
+    } catch (error) {
+      btcPrice = null;
+    }
+  }
+
+  // Correlation from CoinGecko, fallback to Binance klines
+  let corrSource = 'CoinGecko';
+  let correlation: number | null = null;
+  try {
+    const [btc, eth] = await Promise.all([
+      fetchJson(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${windowDays}`),
+      fetchJson(`https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=${windowDays}`),
+    ]);
+    const btcPrices = (btc?.prices || []).map((p: any) => p[1]);
+    const ethPrices = (eth?.prices || []).map((p: any) => p[1]);
+    const btcReturns = computeReturns(btcPrices);
+    const ethReturns = computeReturns(ethPrices);
+    correlation = pearsonCorrelation(btcReturns, ethReturns);
+  } catch (error) {
+    corrSource = 'Binance';
+    try {
+      const [btc, eth] = await Promise.all([
+        fetchJson(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=${windowDays}`),
+        fetchJson(`https://api.binance.com/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=${windowDays}`),
+      ]);
+      const btcPrices = btc.map((k: any) => Number(k[4]));
+      const ethPrices = eth.map((k: any) => Number(k[4]));
+      const btcReturns = computeReturns(btcPrices);
+      const ethReturns = computeReturns(ethPrices);
+      correlation = pearsonCorrelation(btcReturns, ethReturns);
+    } catch (err) {
+      correlation = null;
+    }
+  }
+
+  const priceText = btcPrice ? `$${btcPrice.toFixed(2)}` : 'Unavailable';
+  const corrText = correlation === null ? 'Unavailable' : correlation.toFixed(4);
+
+  return `Market snapshot (live):
+- BTC price: ${priceText} (source: ${priceSource})
+- BTC/ETH correlation (${windowDays}d): ${corrText} (source: ${corrSource})`;
+}
 
 /**
  * Get product details and request payment
@@ -154,13 +266,15 @@ async function checkOrderStatus(
 export const merchantAgent = new Agent({
   name: "x402_merchant_agent",
   model: "gpt-4o",
-  description: "A merchant agent that sells a curated catalog using the x402 payment protocol.",
+  description: "A merchant agent that sells a curated catalog and provides market insights.",
   instruction: `You are a helpful and friendly merchant agent powered by the x402 payment protocol.
 
 **Your Role:**
 - You sell a specific catalog of digital products (starting with a Developer Relations Ebook)
+- You can also provide live BTC price and BTC/ETH correlation on request
 - When a user asks what products are available, describe the catalog and pricing
 - When a user asks to buy the ebook, ALWAYS use the 'getProductDetailsAndRequestPayment' tool
+- When a user asks for BTC price or BTC/ETH correlation, use 'getMarketInsights'
 - After payment is verified by the system, confirm the purchase and provide the download link
 - Be professional, friendly, and concise
 
@@ -170,15 +284,19 @@ export const merchantAgent = new Agent({
 **Critical Rules:**
 - ALWAYS call getProductDetailsAndRequestPayment when a user wants to buy the ebook
 - If the user asks for unavailable items, gently redirect them to the ebook
+- For market data, provide the tool result directly
 - The payment processing happens automatically — you don't need to mention technical details
 
 **Examples:**
 - "What products do you have?" → Explain the ebook and price
 - "I want to buy the Developer Relations Ebook" → Call getProductDetailsAndRequestPayment
-- "Can I buy a book?" → Treat it as the Developer Relations Ebook and proceed`,
+- "Can I buy a book?" → Treat it as the Developer Relations Ebook and proceed
+- "What is BTC price?" → Call getMarketInsights
+- "Correlation between BTC and ETH" → Call getMarketInsights`,
   tools: [
     getProductDetailsAndRequestPayment,
     checkOrderStatus,
+    getMarketInsights,
   ],
 });
 
