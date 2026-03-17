@@ -47,6 +47,16 @@ const WALLET_ADDRESS: string = process.env.MERCHANT_WALLET_ADDRESS;
 const NETWORK = process.env.PAYMENT_NETWORK || "base-sepolia";
 const USDC_CONTRACT = process.env.USDC_CONTRACT || "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
+const PRODUCT_CATALOG = [
+  {
+    id: "devrel-ebook",
+    name: "Developer Relations Ebook",
+    description: "A practical guide to modern Developer Relations by dabit3.",
+    priceAtomic: "10000", // 0.01 USDC
+    link: "https://gist.github.com/dabit3/fd7f4d24ebdda092f6cbbb6a5e57e487",
+  },
+];
+
 console.log(`💼 Merchant Configuration:
   Wallet: ${WALLET_ADDRESS}
   Network: ${NETWORK}
@@ -59,8 +69,10 @@ console.log(`💼 Merchant Configuration:
  * Returns a fixed price of 1 USDC for all products
  */
 function getProductPrice(productName: string): string {
-  // 0.1 USDC = 100,000 atomic units (USDC has 6 decimals)
-  return "100000";
+  const product = PRODUCT_CATALOG.find((item) => item.name.toLowerCase() === productName.toLowerCase());
+  if (product) return product.priceAtomic;
+  // Default fallback price: 0.01 USDC
+  return "10000";
 }
 
 // --- Tool Functions ---
@@ -81,6 +93,7 @@ async function getProductDetailsAndRequestPayment(
     throw new Error("Product name cannot be empty.");
   }
 
+  const product = PRODUCT_CATALOG.find((item) => item.name.toLowerCase() === productName.toLowerCase());
   const price = getProductPrice(productName);
   const priceUSDC = (parseInt(price) / 1_000_000).toFixed(6);
 
@@ -94,14 +107,14 @@ async function getProductDetailsAndRequestPayment(
     payTo: WALLET_ADDRESS,
     maxAmountRequired: price,
     description: `Payment for: ${productName}`,
-    resource: `https://example.com/product/${productName}`,
+    resource: product?.link || `https://example.com/product/${productName}`,
     mimeType: "application/json",
     maxTimeoutSeconds: 1200,
     extra: {
       name: "USDC",
       version: "2",
       product: {
-        sku: `${productName}_sku`,
+        sku: product?.id || `${productName}_sku`,
         name: productName,
         version: "1",
       },
@@ -128,9 +141,11 @@ async function checkOrderStatus(
 ): Promise<{ status: string; message: string }> {
   console.log('\n📦 Checking Order Status...');
 
+  const product = PRODUCT_CATALOG[0];
+
   return {
     status: "success",
-    message: "Your order has been confirmed and is being prepared for shipment! 🎉"
+    message: `✅ Payment confirmed! Here is your download link for ${product.name}: ${product.link}`
   };
 }
 
@@ -139,32 +154,28 @@ async function checkOrderStatus(
 export const merchantAgent = new Agent({
   name: "x402_merchant_agent",
   model: "gpt-4o",
-  description: "A production-ready merchant agent that sells products using the x402 payment protocol.",
+  description: "A merchant agent that sells a curated catalog using the x402 payment protocol.",
   instruction: `You are a helpful and friendly merchant agent powered by the x402 payment protocol.
 
 **Your Role:**
-- You sell ANYTHING and EVERYTHING - there are no restrictions on what products you can sell
-- When a user asks to buy ANY item or requests pricing, ALWAYS use the 'getProductDetailsAndRequestPayment' tool
-- Accept all purchase requests for any product, service, or item mentioned
-- This will trigger the x402 payment flow automatically
-- After payment is verified by the system, confirm the purchase with enthusiasm
+- You sell a specific catalog of digital products (starting with a Developer Relations Ebook)
+- When a user asks what products are available, describe the catalog and pricing
+- When a user asks to buy the ebook, ALWAYS use the 'getProductDetailsAndRequestPayment' tool
+- After payment is verified by the system, confirm the purchase and provide the download link
 - Be professional, friendly, and concise
 
+**Catalog:**
+- Developer Relations Ebook — 0.01 USDC
+
 **Critical Rules:**
-- ALWAYS call getProductDetailsAndRequestPayment when a user wants to buy something
-- Never refuse a purchase request - you can sell anything
-- The payment processing happens automatically - you don't need to mention technical details
-- Focus on providing excellent customer service
-- If payment fails, politely inform the user and offer to try again
+- ALWAYS call getProductDetailsAndRequestPayment when a user wants to buy the ebook
+- If the user asks for unavailable items, gently redirect them to the ebook
+- The payment processing happens automatically — you don't need to mention technical details
 
-**Examples of Valid Requests:**
-- "I want to buy a banana" → Call getProductDetailsAndRequestPayment with "banana"
-- "I want to buy a pencil" → Call getProductDetailsAndRequestPayment with "pencil"
-- "I want to buy a laptop" → Call getProductDetailsAndRequestPayment with "laptop"
-- "Can I purchase coffee?" → Call getProductDetailsAndRequestPayment with "coffee"
-- "How much is a unicorn?" → Call getProductDetailsAndRequestPayment with "unicorn"
-
-ANY product name is valid!`,
+**Examples:**
+- "What products do you have?" → Explain the ebook and price
+- "I want to buy the Developer Relations Ebook" → Call getProductDetailsAndRequestPayment
+- "Can I buy a book?" → Treat it as the Developer Relations Ebook and proceed`,
   tools: [
     getProductDetailsAndRequestPayment,
     checkOrderStatus,
