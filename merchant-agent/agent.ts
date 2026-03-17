@@ -123,7 +123,7 @@ async function getMarketInsights(
   params: Record<string, any>,
   context?: any
 ): Promise<string> {
-  const windowDays = Number(params?.days || 30);
+  const windowDays = Number(params?.days || params?.window || params?.windowDays || 30);
 
   // Price from Dexscreener (fallback to CoinGecko)
   let priceSource = 'Dexscreener';
