@@ -55,6 +55,13 @@ const PRODUCT_CATALOG = [
     priceAtomic: "10000", // 0.01 USDC
     link: "https://gist.github.com/dabit3/fd7f4d24ebdda092f6cbbb6a5e57e487",
   },
+  {
+    id: "market-insights",
+    name: "Market Insights",
+    description: "Live BTC price + BTC/ETH correlation snapshot.",
+    priceAtomic: "1000", // 0.001 USDC
+    link: "https://example.com/market-insights",
+  },
 ];
 
 console.log(`💼 Merchant Configuration:
@@ -205,8 +212,15 @@ async function getProductDetailsAndRequestPayment(
     throw new Error("Product name cannot be empty.");
   }
 
-  const product = PRODUCT_CATALOG.find((item) => item.name.toLowerCase() === productName.toLowerCase());
-  const price = getProductPrice(productName);
+  let product = PRODUCT_CATALOG.find((item) => item.name.toLowerCase() === productName.toLowerCase());
+  if (!product) {
+    const lower = productName.toLowerCase();
+    if (lower.includes('market') || lower.includes('insight')) {
+      product = PRODUCT_CATALOG.find((item) => item.id === 'market-insights');
+    }
+  }
+
+  const price = getProductPrice(product?.name || productName);
   const priceUSDC = (parseInt(price) / 1_000_000).toFixed(6);
 
   console.log(`💰 Price calculated: ${priceUSDC} USDC (${price} atomic units)`);
@@ -218,7 +232,7 @@ async function getProductDetailsAndRequestPayment(
     asset: USDC_CONTRACT,
     payTo: WALLET_ADDRESS,
     maxAmountRequired: price,
-    description: `Payment for: ${productName}`,
+    description: `Payment for: ${product?.name || productName}`,
     resource: product?.link || `https://example.com/product/${productName}`,
     mimeType: "application/json",
     maxTimeoutSeconds: 1200,
@@ -227,7 +241,7 @@ async function getProductDetailsAndRequestPayment(
       version: "2",
       product: {
         sku: product?.id || `${productName}_sku`,
-        name: productName,
+        name: product?.name || productName,
         version: "1",
       },
     },
@@ -253,7 +267,16 @@ async function checkOrderStatus(
 ): Promise<{ status: string; message: string }> {
   console.log('\n📦 Checking Order Status...');
 
-  const product = PRODUCT_CATALOG[0];
+  const requested = String(params?.productName || params?.product || params?.item || '').toLowerCase();
+  if (requested.includes('market') || requested.includes('insight')) {
+    const insights = await getMarketInsights({ days: 30 });
+    return {
+      status: "success",
+      message: `✅ Payment confirmed! Here are your Market Insights:\n${insights}`,
+    };
+  }
+
+  const product = PRODUCT_CATALOG.find((item) => item.id === 'devrel-ebook') || PRODUCT_CATALOG[0];
 
   return {
     status: "success",
@@ -271,28 +294,28 @@ export const merchantAgent = new Agent({
 
 **Your Role:**
 - You sell a specific catalog of digital products (starting with a Developer Relations Ebook)
-- You can also provide live BTC price and BTC/ETH correlation on request
+- You sell a specific catalog of paid products (ebook + market insights)
 - When a user asks what products are available, describe the catalog and pricing
-- When a user asks to buy the ebook, ALWAYS use the 'getProductDetailsAndRequestPayment' tool
-- When a user asks for BTC price or BTC/ETH correlation, use 'getMarketInsights'
-- After payment is verified by the system, confirm the purchase and provide the download link
+- When a user asks to buy the ebook or market insights, ALWAYS use the 'getProductDetailsAndRequestPayment' tool
+- After payment is verified by the system:
+  - For the ebook, provide the download link
+  - For market insights, provide the latest BTC price + BTC/ETH correlation
 - Be professional, friendly, and concise
 
 **Catalog:**
 - Developer Relations Ebook — 0.01 USDC
+- Market Insights (live BTC price + BTC/ETH correlation) — 0.001 USDC
 
 **Critical Rules:**
 - ALWAYS call getProductDetailsAndRequestPayment when a user wants to buy the ebook
 - If the user asks for unavailable items, gently redirect them to the ebook
-- For market data, provide the tool result directly
 - The payment processing happens automatically — you don't need to mention technical details
 
 **Examples:**
-- "What products do you have?" → Explain the ebook and price
+- "What products do you have?" → Explain the ebook + market insights and prices
 - "I want to buy the Developer Relations Ebook" → Call getProductDetailsAndRequestPayment
-- "Can I buy a book?" → Treat it as the Developer Relations Ebook and proceed
-- "What is BTC price?" → Call getMarketInsights
-- "Correlation between BTC and ETH" → Call getMarketInsights`,
+- "I want market insights" → Call getProductDetailsAndRequestPayment
+- "Can I buy a book?" → Treat it as the Developer Relations Ebook and proceed`,
   tools: [
     getProductDetailsAndRequestPayment,
     checkOrderStatus,
