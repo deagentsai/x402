@@ -24,6 +24,7 @@ import { LlmRegistry, LiteLlm } from 'adk-typescript/models';
 import { LocalWallet } from './src/wallet/Wallet';
 import { x402Utils, PaymentStatus } from 'a2a-x402';
 import { logger } from './src/logger';
+import { ethers } from 'ethers';
 
 // --- Client Agent Configuration ---
 
@@ -53,6 +54,7 @@ interface AgentState {
     taskId?: string;
     contextId?: string;
   };
+  pendingWalletSearch?: boolean;
 }
 
 const state: AgentState = {};
@@ -124,6 +126,78 @@ function computeReturns(prices: number[]) {
   return returns;
 }
 
+const EVM_NETWORKS: Record<string, { name: string; rpc: string; explorer: string; native: string; dexscreenerChain: string; coingeckoId: string }> = {
+  ethereum: { name: 'Ethereum', rpc: 'https://ethereum-rpc.publicnode.com', explorer: 'https://etherscan.io', native: 'ETH', dexscreenerChain: 'ethereum', coingeckoId: 'ethereum' },
+  arbitrum: { name: 'Arbitrum', rpc: 'https://arbitrum-one.publicnode.com', explorer: 'https://arbiscan.io', native: 'ETH', dexscreenerChain: 'arbitrum', coingeckoId: 'ethereum' },
+  base: { name: 'Base', rpc: 'https://base-rpc.publicnode.com', explorer: 'https://basescan.org', native: 'ETH', dexscreenerChain: 'base', coingeckoId: 'ethereum' },
+  polygon: { name: 'Polygon', rpc: 'https://polygon-bor.publicnode.com', explorer: 'https://polygonscan.com', native: 'MATIC', dexscreenerChain: 'polygon', coingeckoId: 'matic-network' },
+};
+
+const POPULAR_TOKENS: Record<string, Array<{ address: string; symbol: string; name: string; decimals: number; isNative?: boolean }>> = {
+  ethereum: [
+    { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18, isNative: true },
+    { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+    { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', symbol: 'USDT', name: 'Tether', decimals: 6 },
+    { address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', symbol: 'WBTC', name: 'Wrapped Bitcoin', decimals: 8 },
+  ],
+  arbitrum: [
+    { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18, isNative: true },
+    { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+    { address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', symbol: 'USDT', name: 'Tether', decimals: 6 },
+  ],
+  base: [
+    { address: 'native', symbol: 'ETH', name: 'Ethereum', decimals: 18, isNative: true },
+    { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+  ],
+  polygon: [
+    { address: 'native', symbol: 'MATIC', name: 'Polygon', decimals: 18, isNative: true },
+    { address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+  ],
+};
+
+async function rpcCall(rpcUrl: string, method: string, params: any[]) {
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'RPC error');
+  return data.result;
+}
+
+async function fetchTokenPriceFromDexscreener(tokenAddress: string, chain: string) {
+  try {
+    const data: any = await fetchJson(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+    const pairs = (data?.pairs || []).filter((p: any) => p?.chainId === chain && p?.priceUsd);
+    if (!pairs.length) return null;
+    const best = pairs.sort((a: any, b: any) => (b?.liquidity?.usd || 0) - (a?.liquidity?.usd || 0))[0];
+    const totalLiquidity = pairs.reduce((sum: number, p: any) => sum + (Number(p?.liquidity?.usd) || 0), 0);
+    return {
+      price: Number(best.priceUsd) || 0,
+      change24h: Number(best.priceChange?.h24) || 0,
+      bestPool: best.pairAddress,
+      bestDex: best.dexId,
+      bestPoolLiquidity: Number(best.liquidity?.usd) || 0,
+      totalLiquidity,
+      poolCount: pairs.length,
+      symbol: best.baseToken?.symbol || best.quoteToken?.symbol,
+      name: best.baseToken?.name || best.quoteToken?.name,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function getNativePrice(coinId: string) {
+  try {
+    const data: any = await fetchJson(`https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`);
+    return { price: data?.[coinId]?.usd || 0, change24h: data?.[coinId]?.usd_24h_change || 0 };
+  } catch (err) {
+    return { price: 0, change24h: 0 };
+  }
+}
+
 async function getMarketInsightsSnapshot(windowDays = 30) {
   let btcPrice: number | null = null;
   let priceSource = 'Dexscreener';
@@ -186,6 +260,171 @@ async function getMarketInsightsSnapshot(windowDays = 30) {
 /**
  * Send a message to a remote merchant agent using ADK protocol
  */
+async function runWalletSearch(
+  params: Record<string, any>,
+  context?: ToolContext
+): Promise<string> {
+  if (!state.pendingWalletSearch) {
+    return 'Wallet search is not active. Please purchase Wallet Search first.';
+  }
+
+  const address = typeof params === 'string' ? params : (params.address || params.wallet || params.params || params);
+  if (!address || typeof address !== 'string') {
+    return 'Please provide a valid wallet address.';
+  }
+
+  const addr = address.trim();
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(addr);
+  const isSol = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
+  if (!isEvm && !isSol) {
+    return 'Address format not recognized. Provide an EVM (0x...) or Solana address.';
+  }
+
+  let report = '';
+
+  if (isSol) {
+    // Solana balances
+    let solBalance = 0;
+    let solPrice = 0;
+    let solChange = 0;
+    try {
+      const solPriceData: any = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd&include_24hr_change=true');
+      solPrice = solPriceData?.solana?.usd || 0;
+      solChange = solPriceData?.solana?.usd_24h_change || 0;
+    } catch (err) {
+      solPrice = 0;
+      solChange = 0;
+    }
+
+    const rpcEndpoints = ['https://solana-rpc.publicnode.com'];
+    for (const rpc of rpcEndpoints) {
+      try {
+        const res = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [addr] })
+        });
+        const data = await res.json();
+        if (data?.result?.value !== undefined) {
+          solBalance = data.result.value / 1e9;
+          break;
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    const solValue = (solBalance * solPrice);
+    const tokens: Array<{ symbol: string; mint: string; balance: string; value: string; chain: string; priced: boolean }> = [];
+    tokens.push({ symbol: 'SOL', mint: 'So11111111111111111111111111111111111111112', balance: solBalance.toString(), value: solValue ? solValue.toFixed(2) : '0', chain: 'Solana', priced: solPrice > 0 });
+
+    // SPL tokens
+    try {
+      const tokenRes = await fetch('https://solana-rpc.publicnode.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTokenAccountsByOwner',
+          params: [addr, { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' }, { encoding: 'jsonParsed' }]
+        })
+      });
+      const tokenData = await tokenRes.json();
+      const accounts = tokenData?.result?.value || [];
+      for (const account of accounts.slice(0, 25)) {
+        const info = account?.account?.data?.parsed?.info;
+        const mint = info?.mint;
+        const amount = info?.tokenAmount?.uiAmountString;
+        if (!mint || !amount || Number(amount) === 0) continue;
+        const priceData = await fetchTokenPriceFromDexscreener(mint, 'solana');
+        const price = priceData?.price || 0;
+        const value = Number(amount) * price;
+        tokens.push({
+          symbol: priceData?.symbol || mint.slice(0, 6),
+          mint,
+          balance: amount,
+          value: price ? value.toFixed(2) : 'N/A',
+          chain: 'Solana',
+          priced: price > 0,
+        });
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    const pricedTotal = tokens.filter(t => t.value !== 'N/A').reduce((sum, t) => sum + Number(t.value), 0);
+    const unpricedCount = tokens.filter(t => t.value === 'N/A').length;
+
+    report = `Executive summary\n• Wallet on Solana\n• Holds SOL + ${tokens.length - 1} SPL tokens\n• ${unpricedCount} tokens unpriced\n• Known priced total: $${pricedTotal.toFixed(2)}\n\n─── Wallet — Solana\nAddress: ${addr}\n| Token | Mint | Quantity | Est. USD | Chain |\n| ---- | ---- | ---- | ---- | ---- |\n${tokens.map(t => `| ${t.symbol} | ${t.mint} | ${t.balance} | ${t.value === 'N/A' ? 'N/A' : `$${t.value}`} | ${t.chain} |`).join('\n')}\n\nWallet total (known-priced only): $${pricedTotal.toFixed(2)}\n\nSources used\n• Solana RPC (getBalance, getTokenAccountsByOwner)\n• Dexscreener token endpoint\n• CoinGecko SOL/USD\n\nCaveats / confidence\n• High confidence: chain detection + raw token balances\n• Medium confidence: Solana token pricing for low-liquidity tokens\n• Some tokens had no discovered market pairs, so USD value is unknown.`;
+  }
+
+  if (isEvm) {
+    const chainResults: Array<{ chain: string; tokens: any[]; total: number }> = [];
+
+    for (const [key, cfg] of Object.entries(EVM_NETWORKS)) {
+      const tokens: any[] = [];
+      // native balance
+      let nativeBal = 0;
+      try {
+        const balHex = await rpcCall(cfg.rpc, 'eth_getBalance', [addr, 'latest']);
+        nativeBal = Number(ethers.formatEther(balHex || '0x0'));
+      } catch (err) {
+        nativeBal = 0;
+      }
+      const nativePrice = await getNativePrice(cfg.coingeckoId);
+      if (nativeBal > 0) {
+        tokens.push({
+          symbol: cfg.native,
+          contract: 'native',
+          balance: nativeBal.toString(),
+          value: (nativeBal * nativePrice.price).toFixed(2),
+          chain: cfg.name,
+        });
+      }
+
+      const tokenList = POPULAR_TOKENS[key] || [];
+      for (const token of tokenList.filter(t => !t.isNative)) {
+        try {
+          const iface = new ethers.Interface(['function balanceOf(address owner) view returns (uint256)']);
+          const data = iface.encodeFunctionData('balanceOf', [addr]);
+          const result = await rpcCall(cfg.rpc, 'eth_call', [{ to: token.address, data }, 'latest']);
+          const bal = Number(ethers.formatUnits(result || '0x0', token.decimals));
+          if (bal > 0) {
+            const priceData = await fetchTokenPriceFromDexscreener(token.address, cfg.dexscreenerChain);
+            const price = priceData?.price || 0;
+            tokens.push({
+              symbol: token.symbol,
+              contract: token.address,
+              balance: bal.toString(),
+              value: price ? (bal * price).toFixed(2) : 'N/A',
+              chain: cfg.name,
+            });
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      const chainTotal = tokens.reduce((sum, t) => sum + (t.value === 'N/A' ? 0 : Number(t.value)), 0);
+      if (tokens.length > 0) {
+        chainResults.push({ chain: cfg.name, tokens, total: chainTotal });
+      }
+    }
+
+    const overallTotal = chainResults.reduce((sum, c) => sum + c.total, 0);
+    const tables = chainResults.map(c => {
+      const rows = c.tokens.map(t => `| ${t.symbol} | ${t.contract} | ${t.balance} | ${t.value === 'N/A' ? 'N/A' : `$${t.value}`} | ${t.chain} |`).join('\n');
+      return `─── Wallet — ${c.chain}\nAddress: ${addr}\n| Token | Contract | Quantity | Est. USD | Chain |\n| ---- | ---- | ---- | ---- | ---- |\n${rows}\n\n${c.chain} total: $${c.total.toFixed(2)}`;
+    }).join('\n\n');
+
+    report = `Executive summary\n• Wallet is an EVM address\n• Chains scanned: ${chainResults.map(c => c.chain).join(', ') || 'none'}\n• Combined known total: $${overallTotal.toFixed(2)}\n\n${tables}\n\nSources used\n• Public RPCs (Ethereum, Arbitrum, Base, Polygon)\n• Dexscreener token endpoint\n• CoinGecko native prices\n\nCaveats / confidence\n• High confidence: chain detection + native balances\n• Medium confidence: token pricing and limited token list\n• This report scans popular tokens only; obscure tokens may be missing.`;
+  }
+
+  state.pendingWalletSearch = false;
+  return report;
+}
+
 async function sendMessageToMerchant(
   params: Record<string, any>,
   context?: ToolContext
@@ -442,6 +681,7 @@ async function confirmPayment(
       // Wallet search placeholder
       let walletSearch = '';
       if (isWallet) {
+        state.pendingWalletSearch = true;
         walletSearch = `\n\n**Wallet Search:**\nPlease provide the wallet address (EVM or Solana) you'd like to scan.`;
       }
 
@@ -528,6 +768,10 @@ Introduce yourself and explain what you can do:
 - Use sendMessageToMerchant to request the catalog and summarize it for the user
 - Ensure the response lists: Developer Relations Ebook (0.01 USDC), Market Insights (0.001 USDC), Crypto News (0.003 USDC), Wallet Search (0.004 USDC)
 
+**When Wallet Search was purchased and the user provides an address:**
+- Call runWalletSearch with the address
+- Return the report in Yankho’s template
+
 **Important guidelines:**
 - ALWAYS explain what you're doing in a friendly, clear way
 - When greeting messages arrive, respond warmly and explain your capabilities
@@ -552,6 +796,7 @@ You: "✅ Payment successful! Your banana order has been confirmed!"`,
     sendMessageToMerchant,
     confirmPayment,
     cancelPayment,
+    runWalletSearch,
     getWalletInfo,
   ],
 });
