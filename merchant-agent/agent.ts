@@ -46,6 +46,7 @@ if (!process.env.MERCHANT_WALLET_ADDRESS) {
 const WALLET_ADDRESS: string = process.env.MERCHANT_WALLET_ADDRESS;
 const NETWORK = process.env.PAYMENT_NETWORK || "base-sepolia";
 const USDC_CONTRACT = process.env.USDC_CONTRACT || "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || '';
 
 const PRODUCT_CATALOG = [
   {
@@ -61,6 +62,20 @@ const PRODUCT_CATALOG = [
     description: "Live BTC price + BTC/ETH correlation snapshot.",
     priceAtomic: "1000", // 0.001 USDC
     link: "https://example.com/market-insights",
+  },
+  {
+    id: "crypto-news",
+    name: "Crypto News (Top 20)",
+    description: "Latest 20 crypto headlines via Finnhub.",
+    priceAtomic: "3000", // 0.003 USDC
+    link: "https://finnhub.io",
+  },
+  {
+    id: "wallet-search",
+    name: "Wallet Search (EVM + Solana)",
+    description: "Full holdings report in Yankho format.",
+    priceAtomic: "4000", // 0.004 USDC
+    link: "https://example.com/wallet-search",
   },
 ];
 
@@ -78,6 +93,21 @@ async function fetchJson(url: string): Promise<any> {
     throw new Error(`Request failed: ${res.status} ${res.statusText}`);
   }
   return res.json();
+}
+
+async function fetchCryptoNews(limit = 20) {
+  if (!FINNHUB_API_KEY) {
+    throw new Error('FINNHUB_API_KEY is missing');
+  }
+  const news: any[] = await fetchJson(`https://finnhub.io/api/v1/news?category=crypto&token=${FINNHUB_API_KEY}`);
+  const items = Array.isArray(news) ? news.slice(0, limit) : [];
+  if (!items.length) return 'No news returned.';
+  return items.map((item, idx) => {
+    const title = item?.headline || 'Untitled';
+    const source = item?.source ? ` (${item.source})` : '';
+    const url = item?.url || '';
+    return `${idx + 1}. ${title}${source}\n${url}`.trim();
+  }).join('\n\n');
 }
 
 function pearsonCorrelation(a: number[], b: number[]) {
@@ -276,6 +306,21 @@ async function checkOrderStatus(
     };
   }
 
+  if (requested.includes('news')) {
+    const news = await fetchCryptoNews(20);
+    return {
+      status: "success",
+      message: `✅ Payment confirmed! Here are the latest 20 crypto headlines:\n${news}`,
+    };
+  }
+
+  if (requested.includes('wallet')) {
+    return {
+      status: "success",
+      message: `✅ Payment confirmed! Please provide the wallet address (EVM or Solana) you'd like to scan.`,
+    };
+  }
+
   const product = PRODUCT_CATALOG.find((item) => item.id === 'devrel-ebook') || PRODUCT_CATALOG[0];
 
   return {
@@ -305,6 +350,8 @@ export const merchantAgent = new Agent({
 **Catalog:**
 - Developer Relations Ebook — 0.01 USDC
 - Market Insights (live BTC price + BTC/ETH correlation) — 0.001 USDC
+- Crypto News (latest 20 headlines) — 0.003 USDC
+- Wallet Search (EVM + Solana) — 0.004 USDC
 
 **Critical Rules:**
 - ALWAYS call getProductDetailsAndRequestPayment when a user wants to buy the ebook

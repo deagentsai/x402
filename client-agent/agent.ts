@@ -499,7 +499,7 @@ Introduce yourself and explain what you can do:
 
 **When users ask what products are available:**
 - Use sendMessageToMerchant to request the catalog and summarize it for the user
-- Ensure the response lists: Developer Relations Ebook (0.01 USDC) and Market Insights (0.001 USDC)
+- Ensure the response lists: Developer Relations Ebook (0.01 USDC), Market Insights (0.001 USDC), Crypto News (0.003 USDC), Wallet Search (0.004 USDC)
 
 **Important guidelines:**
 - ALWAYS explain what you're doing in a friendly, clear way
