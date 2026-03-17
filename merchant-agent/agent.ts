@@ -72,7 +72,7 @@ console.log(`💼 Merchant Configuration:
 
 // --- Helper Functions ---
 
-async function fetchJson(url: string) {
+async function fetchJson(url: string): Promise<any> {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status} ${res.statusText}`);
@@ -136,7 +136,7 @@ async function getMarketInsights(
   let priceSource = 'Dexscreener';
   let btcPrice: number | null = null;
   try {
-    const search = await fetchJson('https://api.dexscreener.com/latest/dex/search?q=WBTC');
+    const search: any = await fetchJson('https://api.dexscreener.com/latest/dex/search?q=WBTC');
     const pairs = Array.isArray(search?.pairs) ? search.pairs : [];
     const best = pairs
       .filter((p: any) => p?.baseToken?.symbol?.toUpperCase() === 'WBTC')
@@ -151,7 +151,7 @@ async function getMarketInsights(
   if (!btcPrice) {
     try {
       priceSource = 'CoinGecko';
-      const cg = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      const cg: any = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
       btcPrice = cg?.bitcoin?.usd ?? null;
     } catch (error) {
       btcPrice = null;
@@ -162,7 +162,7 @@ async function getMarketInsights(
   let corrSource = 'CoinGecko';
   let correlation: number | null = null;
   try {
-    const [btc, eth] = await Promise.all([
+    const [btc, eth]: any[] = await Promise.all([
       fetchJson(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${windowDays}`),
       fetchJson(`https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=${windowDays}`),
     ]);
@@ -174,7 +174,7 @@ async function getMarketInsights(
   } catch (error) {
     corrSource = 'Binance';
     try {
-      const [btc, eth] = await Promise.all([
+      const [btc, eth]: any[] = await Promise.all([
         fetchJson(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=${windowDays}`),
         fetchJson(`https://api.binance.com/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=${windowDays}`),
       ]);
