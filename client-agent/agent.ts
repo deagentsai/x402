@@ -614,7 +614,7 @@ async function confirmPayment(
 ): Promise<string> {
   if (!state.pendingPayment) {
     if (state.lastRequestedProduct) {
-      return await sendMessageToMerchant(state.lastRequestedProduct, context);
+      return await sendMessageToMerchant({ message: state.lastRequestedProduct }, context);
     }
     return 'No pending payment to confirm.';
   }
