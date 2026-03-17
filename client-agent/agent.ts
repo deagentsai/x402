@@ -297,10 +297,10 @@ async function confirmPayment(
         }
       }
 
-      // Fallback: include product resource link if merchant response didn't include it
+      // Always include product resource link as the download link (if available)
       let merchantLink = '';
       const resourceLink = state.pendingPayment.requirements.resource;
-      if (!merchantConfirmation && resourceLink) {
+      if (resourceLink) {
         merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
       }
 
