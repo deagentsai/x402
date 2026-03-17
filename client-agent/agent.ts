@@ -490,7 +490,16 @@ async function sendMessageToMerchant(
   context?: ToolContext
 ): Promise<string> {
   // Handle both direct string and object with message/params field
-  const message = typeof params === 'string' ? params : (params.message || params.params || params);
+  let message = typeof params === 'string' ? params : (params.message || params.params || params);
+  if (typeof message === 'string') {
+    const lower = message.toLowerCase();
+    if (lower.includes('crypto news') || (lower.includes('news') && lower.includes('crypto'))) {
+      message = 'I want to buy Crypto News';
+    }
+    if (lower.includes('wallet search') || (lower.includes('wallet') && lower.includes('search'))) {
+      message = 'I want to buy Wallet Search';
+    }
+  }
 
   logger.log(`\n📤 Sending message to merchant: "${message}"`);
 
