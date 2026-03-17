@@ -55,6 +55,7 @@ interface AgentState {
     contextId?: string;
   };
   pendingWalletSearch?: boolean;
+  lastRequestedProduct?: string;
 }
 
 const state: AgentState = {};
@@ -488,6 +489,9 @@ async function sendMessageToMerchant(
 ): Promise<string> {
   // Handle both direct string and object with message/params field
   const message = typeof params === 'string' ? params : (params.message || params.params || params);
+  if (typeof message === 'string' && message.trim()) {
+    state.lastRequestedProduct = message.trim();
+  }
 
   logger.log(`\n📤 Sending message to merchant: "${message}"`);
 
@@ -609,6 +613,9 @@ async function confirmPayment(
   context?: ToolContext
 ): Promise<string> {
   if (!state.pendingPayment) {
+    if (state.lastRequestedProduct) {
+      return await sendMessageToMerchant(state.lastRequestedProduct, context);
+    }
     return 'No pending payment to confirm.';
   }
 
