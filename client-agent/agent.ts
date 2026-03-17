@@ -397,6 +397,8 @@ async function confirmPayment(
       const productLabel = (state.pendingPayment.requirements.extra?.product?.name || productName || '').toLowerCase();
       const isEbook = productLabel.includes('ebook');
       const isMarket = productLabel.includes('market') || productLabel.includes('insight');
+      const isNews = productLabel.includes('news');
+      const isWallet = productLabel.includes('wallet');
 
       // Include download link only for the ebook
       let merchantLink = '';
@@ -418,6 +420,30 @@ async function confirmPayment(
         }
       }
 
+      // Include news for news purchase
+      let cryptoNews = '';
+      if (isNews) {
+        try {
+          const news = await fetchJson(`https://finnhub.io/api/v1/news?category=crypto&token=${process.env.FINNHUB_API_KEY}`);
+          const items = Array.isArray(news) ? news.slice(0, 20) : [];
+          const formatted = items.map((item: any, idx: number) => {
+            const title = item?.headline || 'Untitled';
+            const source = item?.source ? ` (${item.source})` : '';
+            const url = item?.url || '';
+            return `${idx + 1}. ${title}${source}\n${url}`.trim();
+          }).join('\n\n');
+          cryptoNews = `\n\n**Crypto News (Top 20):**\n${formatted || 'No news returned.'}`;
+        } catch (err) {
+          cryptoNews = `\n\n**Crypto News (Top 20):**\nUnavailable (failed to fetch news).`;
+        }
+      }
+
+      // Wallet search placeholder
+      let walletSearch = '';
+      if (isWallet) {
+        walletSearch = `\n\n**Wallet Search:**\nPlease provide the wallet address (EVM or Solana) you'd like to scan.`;
+      }
+
       const amountUSDC = (Number(amount) / 1_000_000).toFixed(6);
       const result = `✅ Payment completed successfully!
 
@@ -427,7 +453,7 @@ async function confirmPayment(
 - Token: ${tokenAddress}
 - Merchant: ${merchantAddress}
 - Transaction: ${transferResult.txHash}
-- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}${merchantLink}${marketInsights}`;
+- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}${merchantLink}${marketInsights}${cryptoNews}${walletSearch}`;
 
       // Clear pending payment
       state.pendingPayment = undefined;

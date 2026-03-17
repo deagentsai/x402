@@ -247,6 +247,10 @@ async function getProductDetailsAndRequestPayment(
     const lower = productName.toLowerCase();
     if (lower.includes('market') || lower.includes('insight')) {
       product = PRODUCT_CATALOG.find((item) => item.id === 'market-insights');
+    } else if (lower.includes('news')) {
+      product = PRODUCT_CATALOG.find((item) => item.id === 'crypto-news');
+    } else if (lower.includes('wallet')) {
+      product = PRODUCT_CATALOG.find((item) => item.id === 'wallet-search');
     }
   }
 
