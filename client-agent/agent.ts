@@ -618,6 +618,11 @@ async function confirmPayment(
     return 'No pending payment to confirm.';
   }
 
+  // If the model routed here without user confirmation, ask explicitly
+  if (params && typeof params === 'object' && (params as any).confirm === false) {
+    return `Please confirm payment for ${state.pendingProductName || 'the requested item'}.`;
+  }
+
   logger.log('\n💰 User confirmed payment. Processing...');
 
   try {
