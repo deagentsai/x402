@@ -298,11 +298,15 @@ async function confirmPayment(
         }
       }
 
-      // Always include product resource link as the download link (if available)
+      // Include download link only for the ebook
       let merchantLink = '';
-      const resourceLink = state.pendingPayment.requirements.resource || DEFAULT_EBOOK_LINK;
-      if (resourceLink) {
-        merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
+      const productLabel = (state.pendingPayment.requirements.extra?.product?.name || productName || '').toLowerCase();
+      const isEbook = productLabel.includes('ebook');
+      if (isEbook) {
+        const resourceLink = state.pendingPayment.requirements.resource || DEFAULT_EBOOK_LINK;
+        if (resourceLink) {
+          merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
+        }
       }
 
       const amountUSDC = (Number(amount) / 1_000_000).toFixed(6);
