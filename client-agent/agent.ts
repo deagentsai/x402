@@ -33,6 +33,7 @@ LlmRegistry.register(LiteLlm);
 (LlmRegistry as any)._register('.*', LiteLlm);
 
 const MERCHANT_AGENT_URL = process.env.MERCHANT_AGENT_URL || 'http://localhost:10000';
+const DEFAULT_EBOOK_LINK = 'https://gist.github.com/dabit3/fd7f4d24ebdda092f6cbbb6a5e57e487';
 
 logger.log(`🤖 Client Agent Configuration:
   Merchant URL: ${MERCHANT_AGENT_URL}
@@ -299,7 +300,7 @@ async function confirmPayment(
 
       // Always include product resource link as the download link (if available)
       let merchantLink = '';
-      const resourceLink = state.pendingPayment.requirements.resource;
+      const resourceLink = state.pendingPayment.requirements.resource || DEFAULT_EBOOK_LINK;
       if (resourceLink) {
         merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
       }
