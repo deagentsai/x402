@@ -55,7 +55,7 @@ interface AgentState {
     contextId?: string;
   };
   pendingWalletSearch?: boolean;
-  lastRequestedProduct?: string;
+  pendingProductName?: string;
 }
 
 const state: AgentState = {};
@@ -489,9 +489,6 @@ async function sendMessageToMerchant(
 ): Promise<string> {
   // Handle both direct string and object with message/params field
   const message = typeof params === 'string' ? params : (params.message || params.params || params);
-  if (typeof message === 'string' && message.trim()) {
-    state.lastRequestedProduct = message.trim();
-  }
 
   logger.log(`\n📤 Sending message to merchant: "${message}"`);
 
@@ -558,6 +555,7 @@ async function sendMessageToMerchant(
             taskId: event.invocationId,
             contextId: event.invocationId,
           };
+          state.pendingProductName = productName;
 
           logger.log(`💰 Payment required: ${priceUSDC} USDC for ${productName}`);
 
@@ -613,8 +611,9 @@ async function confirmPayment(
   context?: ToolContext
 ): Promise<string> {
   if (!state.pendingPayment) {
-    if (state.lastRequestedProduct) {
-      return await sendMessageToMerchant({ message: state.lastRequestedProduct }, context);
+    if (state.pendingProductName) {
+      await sendMessageToMerchant({ message: `I want to buy ${state.pendingProductName}` }, context);
+      return `Payment request refreshed for ${state.pendingProductName}. Please confirm to proceed.`;
     }
     return 'No pending payment to confirm.';
   }
