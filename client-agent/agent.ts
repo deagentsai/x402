@@ -428,9 +428,10 @@ async function confirmPayment(
           const items = Array.isArray(news) ? news.slice(0, 20) : [];
           const formatted = items.map((item: any, idx: number) => {
             const title = item?.headline || 'Untitled';
-            const source = item?.source ? ` (${item.source})` : '';
+            const topic = item?.category ? `Topic: ${item.category}` : 'Topic: crypto';
+            const source = item?.source ? `Source: ${item.source}` : 'Source: finnhub';
             const url = item?.url || '';
-            return `${idx + 1}. ${title}${source}\n${url}`.trim();
+            return `${idx + 1}. ${title}\n${topic}\n${source}\n${url}`.trim();
           }).join('\n\n');
           cryptoNews = `\n\n**Crypto News (Top 20):**\n${formatted || 'No news returned.'}`;
         } catch (err) {
