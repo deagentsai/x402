@@ -87,6 +87,102 @@ async function ensureSession(): Promise<string> {
 
 // --- Tool Functions ---
 
+async function fetchJson(url: string): Promise<any> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+function pearsonCorrelation(a: number[], b: number[]) {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return null;
+  const meanA = a.reduce((s, v) => s + v, 0) / n;
+  const meanB = b.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let denA = 0;
+  let denB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - meanA;
+    const db = b[i] - meanB;
+    num += da * db;
+    denA += da * da;
+    denB += db * db;
+  }
+  const denom = Math.sqrt(denA * denB);
+  return denom === 0 ? null : num / denom;
+}
+
+function computeReturns(prices: number[]) {
+  const returns: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    const prev = prices[i - 1];
+    const curr = prices[i];
+    if (prev > 0) returns.push((curr - prev) / prev);
+  }
+  return returns;
+}
+
+async function getMarketInsightsSnapshot(windowDays = 30) {
+  let btcPrice: number | null = null;
+  let priceSource = 'Dexscreener';
+  try {
+    const search: any = await fetchJson('https://api.dexscreener.com/latest/dex/search?q=WBTC');
+    const pairs = Array.isArray(search?.pairs) ? search.pairs : [];
+    const best = pairs
+      .filter((p: any) => p?.baseToken?.symbol?.toUpperCase() === 'WBTC')
+      .sort((a: any, b: any) => (b?.liquidity?.usd || 0) - (a?.liquidity?.usd || 0))[0];
+    if (best?.priceUsd) btcPrice = Number(best.priceUsd);
+  } catch (err) {
+    // ignore
+  }
+
+  if (!btcPrice) {
+    try {
+      priceSource = 'CoinGecko';
+      const cg: any = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      btcPrice = cg?.bitcoin?.usd ?? null;
+    } catch (err) {
+      btcPrice = null;
+    }
+  }
+
+  let correlation: number | null = null;
+  let corrSource = 'CoinGecko';
+  try {
+    const [btc, eth]: any[] = await Promise.all([
+      fetchJson(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${windowDays}`),
+      fetchJson(`https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=${windowDays}`),
+    ]);
+    const btcPrices = (btc?.prices || []).map((p: any) => p[1]);
+    const ethPrices = (eth?.prices || []).map((p: any) => p[1]);
+    const btcReturns = computeReturns(btcPrices);
+    const ethReturns = computeReturns(ethPrices);
+    correlation = pearsonCorrelation(btcReturns, ethReturns);
+  } catch (err) {
+    corrSource = 'Binance';
+    try {
+      const [btc, eth]: any[] = await Promise.all([
+        fetchJson(`https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=${windowDays}`),
+        fetchJson(`https://api.binance.com/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=${windowDays}`),
+      ]);
+      const btcPrices = btc.map((k: any) => Number(k[4]));
+      const ethPrices = eth.map((k: any) => Number(k[4]));
+      const btcReturns = computeReturns(btcPrices);
+      const ethReturns = computeReturns(ethPrices);
+      correlation = pearsonCorrelation(btcReturns, ethReturns);
+    } catch (err2) {
+      correlation = null;
+    }
+  }
+
+  const priceText = btcPrice ? `$${btcPrice.toFixed(2)}` : 'Unavailable';
+  const corrText = correlation === null ? 'Unavailable' : correlation.toFixed(4);
+
+  return `Market Insights (live):\n- BTC price: ${priceText} (source: ${priceSource})\n- BTC/ETH correlation (${windowDays}d): ${corrText} (source: ${corrSource})`;
+}
+
 /**
  * Send a message to a remote merchant agent using ADK protocol
  */
@@ -298,14 +394,27 @@ async function confirmPayment(
         }
       }
 
-      // Include download link only for the ebook
-      let merchantLink = '';
       const productLabel = (state.pendingPayment.requirements.extra?.product?.name || productName || '').toLowerCase();
       const isEbook = productLabel.includes('ebook');
+      const isMarket = productLabel.includes('market') || productLabel.includes('insight');
+
+      // Include download link only for the ebook
+      let merchantLink = '';
       if (isEbook) {
         const resourceLink = state.pendingPayment.requirements.resource || DEFAULT_EBOOK_LINK;
         if (resourceLink) {
           merchantLink = `\n\n**Download Link:**\n${resourceLink}`;
+        }
+      }
+
+      // Include insights for market purchase
+      let marketInsights = '';
+      if (isMarket) {
+        try {
+          const insights = await getMarketInsightsSnapshot(30);
+          marketInsights = `\n\n**Market Insights:**\n${insights}`;
+        } catch (err) {
+          marketInsights = `\n\n**Market Insights:**\nUnavailable (failed to fetch live data).`;
         }
       }
 
@@ -318,7 +427,7 @@ async function confirmPayment(
 - Token: ${tokenAddress}
 - Merchant: ${merchantAddress}
 - Transaction: ${transferResult.txHash}
-- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}${merchantLink}`;
+- View on BaseScan: https://sepolia.basescan.org/tx/${transferResult.txHash}${merchantConfirmation}${merchantLink}${marketInsights}`;
 
       // Clear pending payment
       state.pendingPayment = undefined;
