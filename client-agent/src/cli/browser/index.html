@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Client Agent</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.12.1/dist/ethers.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Client Agent</h1>
+        <p>Chat + Wallet</p>
+      </header>
+
+      <section class="wallet">
+        <div class="wallet-header">
+          <h2>Wallet</h2>
+          <button id="connectBtn">Connect MetaMask</button>
+        </div>
+        <div class="wallet-grid">
+          <div>
+            <div class="label">Status</div>
+            <div id="status">Disconnected</div>
+          </div>
+          <div>
+            <div class="label">Address</div>
+            <div id="address">—</div>
+          </div>
+          <div>
+            <div class="label">Chain</div>
+            <select id="chainSelect">
+              <option value="0xaa36a7">Base Sepolia</option>
+              <option value="0x2105">Base</option>
+              <option value="0x1">Ethereum</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">USDC Balance</div>
+            <div id="usdc">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="chat">
+        <div id="messages" class="messages"></div>
+        <div class="input-row">
+          <input id="messageInput" type="text" placeholder="Type a message..." />
+          <button id="sendBtn">Send</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

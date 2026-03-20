@@ -1,0 +1,89 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background: #0b0f14;
+  color: #e6edf3;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; padding: 0; }
+
+.app {
+  max-width: 960px;
+  margin: 32px auto;
+  padding: 0 16px 48px;
+}
+
+header h1 { margin: 0; font-size: 28px; }
+header p { margin: 4px 0 20px; color: #9aa4b2; }
+
+.wallet, .chat {
+  background: #11161d;
+  border: 1px solid #1f2630;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.wallet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.label { color: #9aa4b2; font-size: 12px; margin-bottom: 4px; }
+
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+select, input {
+  width: 100%;
+  background: #0b0f14;
+  color: #e6edf3;
+  border: 1px solid #1f2630;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.messages {
+  min-height: 280px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px;
+  background: #0b0f14;
+  border: 1px solid #1f2630;
+  border-radius: 8px;
+}
+
+.message {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #141b24;
+}
+
+.message.user { background: #1d2530; }
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.input-row input { flex: 1; }
